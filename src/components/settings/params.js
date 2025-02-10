@@ -13,7 +13,26 @@ let defaults = {}
 let listener = Subscribe()
 
 /**
- * Запуск
+ * Initializes the media player settings based on the current platform and user configurations.
+ *
+ * This function configures various settings by applying platform-specific options for the main player,
+ * IPTV player, and torrent player. Depending on the detected platform (such as Tizen, Orsay, WebOS,
+ * Android, desktop, macOS, Apple, or Apple TV), it invokes the `select` function with appropriate
+ * option mappings and default values. Additionally, it uses the `trigger` function to enable related
+ * features like internal torrent client support, glass style, and advanced animations.
+ *
+ * The function also sets up other configurations including:
+ * - Screensaver type selection with preset options (e.g., nature, ChromeCast, CUB, Aerial).
+ * - Keyboard type selection based on whether the device is mobile, Apple TV, or macOS.
+ * - Language and torrent parsing combinations, using stored language preferences and dynamic language
+ *   code mappings.
+ * - Protocol selection between HTTP and HTTPS.
+ *
+ * Side Effects:
+ * - Updates global settings state through calls to `select` and `trigger`.
+ * - Reads from and writes to persistent storage for language and parsing configurations.
+ *
+ * @returns {void}
  */
 function init(){
     if(Platform.is('tizen')){

@@ -676,6 +676,37 @@ function locked(data, call){
     else call()
 }
 
+/**
+ * Launches video playback using an external player application based on platform and configuration,
+ * or falls back to internal playback if no external option is applicable.
+ *
+ * This function determines the appropriate video playback method using the provided data and the
+ * player's configuration settings. It supports multiple platforms (such as Apple devices, macOS, Apple TV,
+ * webOS, Android, and desktop) and various external players (e.g., VLC, nPlayer, Infuse, SVPlayer, MPV, IINA, SenPlayer).
+ * Depending on the platform and the player's storage settings, it modifies the video URL and launches the external player
+ * via URL schemes or system commands. If no matching condition is met or the URL contains "youtube.com", it falls back
+ * to the internal playback callback.
+ *
+ * @param {Object} data - An object containing video playback information.
+ * @param {string} data.url - The URL of the video to play.
+ * @param {Array} [data.playlist] - An optional array of playlist items where each item has a URL.
+ * @param {Object} [data.timeline] - An optional object representing playback timeline data (e.g., { time: number }).
+ * @param {string} [data.path] - Optional path or identifier used in player launching (e.g., for WebOS).
+ * @param {string} [data.title] - Optional title of the video, used when launching certain players.
+ * @param {string} [data.torrent_hash] - Optional torrent hash string, relevant for IPTV streams.
+ * @param {string} [need] - An optional string indicating additional player requirements used for storage key customization.
+ * @param {Function} inner - A callback function to execute internal video playback when no external player is used.
+ *
+ * @example
+ * // Attempt to launch an external player; if not applicable, fall back to internal playback.
+ * start(
+ *   { url: 'http://example.com/video?preload', playlist: [{ url: 'http://example.com/video?preload' }] },
+ *   'hd',
+ *   () => {
+ *     console.log('Using internal player as fallback.');
+ *   }
+ * );
+ */
 function start(data, need, inner){
     let player_need = 'player' + (need ? '_' + need : '')
 
