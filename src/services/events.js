@@ -6,10 +6,29 @@ let events = [
         start: '10-25T00:00:00',
         end:   '10-31T23:59:00',
         name:  'halloween'
+    },
+    {
+        start: '11-24T00:00:00',
+        end:   '11-30T23:59:00',
+        name:  'black-friday'
+    },
+
+    // Новогодние
+    {
+        start: '12-20T00:00:00',
+        end:   '01-10T23:59:00',
+        name:  'snow'
+    },
+    {
+        start: '01-01T00:00:00',
+        end:   '01-03T23:59:00',
+        name:  'new-year'
     }
 ]
 
 function init(){
+    if(!window.lampa_settings.services) return
+
     events.forEach((event)=> {
         let now  = new Date().getTime()
         let year = new Date().getFullYear()

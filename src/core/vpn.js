@@ -14,6 +14,8 @@ let network = new Request()
 let responce_code = 'ru'
 
 function region(call){
+    if(!window.lampa_settings.geo) return call && call(responce_code)
+    
     let reg = Storage.get('region','{}')
 
     Arrays.extend({
@@ -59,12 +61,18 @@ let extract = (call, error)=>{
 }
 
 function task(call){
+    if(!window.lampa_settings.geo) return call && call()
+
     extract((country)=>{
         console.log('VPN', 'geo.' + Manifest.cub_domain + ' domain responding ', country)
 
         country = country.trim().toLowerCase()
         
-        if(country.length > 10) console.warn('VPN', 'wrong responce, use default ru')
+        if(country.length > 10){
+            country = 'ru'
+
+            console.warn('VPN', 'wrong responce, use default ru')
+        } 
 
         if((country == 'ru' || country == 'by' || country == '' || country.length > 10) && !window.lampa_settings.disable_features.install_proxy){
             console.log('VPN', 'launch TMDB Proxy')
