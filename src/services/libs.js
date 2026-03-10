@@ -1,8 +1,5 @@
 import Utils from '../utils/utils'
 import Manifest from '../core/manifest'
-import Platform from '../core/platform'
-import Storage from '../core/storage/storage'
-import Metric from './metric'
 
 /**
  * Инициализация дополнительных библиотек
@@ -13,25 +10,23 @@ function init(){
 
     // Видео библиотеки
     include = include.concat(['hls/hls.js', 'dash/dash.js', 'qrcode/qrcode.js'].map(lib=>{
-        return window.location.protocol == 'file:' ? Manifest.github_lampa + 'vender/' + lib : './vender/' + lib
+        return window.location.protocol == 'file:' || window.location.href.indexOf('chrome-extension') > -1 ? Manifest.github_lampa + 'vender/' + lib : './vender/' + lib
     }))
 
     // YouTube IFrame API
-    if(window.youtube_lazy_load && window.lampa_settings.youtube){
-        include.push(Utils.protocol() + 'youtube.com/iframe_api')
-    }
+    // больше не актуально, так как youtube плеер теперь использует собственный мост для взаимодействия с iframe, и не зависит от глобального объекта YT
+    // if(window.youtube_lazy_load && window.lampa_settings.youtube){
+    //     include.push(Utils.protocol() + 'youtube.com/iframe_api')
+    // }
 
     // Плагины различные
     if(!window.lampa_settings.iptv && window.lampa_settings.services){
         include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/sport')
         include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/tsarea')
-
-        if(Platform.screen('tv') && Storage.field('player') == 'inner' && Platform.is('android')){
-            include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/shots_present')
-
-            Metric.counter('shots_present')
-        }
     }
+
+    // Плагин Shots
+    if(window.location.hostname !== 'localhost' && !window.lampa_settings.iptv) include.push(Utils.protocol() + Manifest.cub_domain + '/plugin/shots')
 
     Utils.putScriptAsync(include,()=>{})
 }

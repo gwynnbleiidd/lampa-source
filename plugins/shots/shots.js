@@ -11,6 +11,10 @@ import List from './components/list.js'
 import Card from './components/card.js'
 import View from './utils/view.js'
 import Channel from './components/channel.js'
+import Present from './components/present.js'
+import Roll from './utils/roll.js'
+import Tags from './utils/tags.js'
+import Settings from './utils/settings.js'
 
 function startPlugin() {
     window.plugin_shots_ready = true
@@ -24,11 +28,15 @@ function startPlugin() {
 
         Handler.init()
 
+        Settings.init()
+
         Favorite.init()
 
         Created.init()
 
         View.init()
+
+        Tags.load()
 
         $('body').append(`
             <style>
@@ -114,13 +122,15 @@ function startPlugin() {
             index: 2,
             screen: ['main'],
             call: (params, screen)=>{
+                if(Lampa.Account.Permit.child) return
+
                 return function(call){
-                    Api.lenta(1, (shots)=>{
+                    Api.lenta({sort: 'new'}, (shots)=>{
                         Lampa.Utils.extendItemsParams(shots, {
                             createInstance: (item_data)=> Shot(item_data, {
                                 playlist: shots,
                                 onNext: (page, call)=>{
-                                    Api.lenta(page, call)
+                                    Api.lenta({sort: 'new', page: page}, call)
                                 }
                             })
                         })
@@ -147,33 +157,119 @@ function startPlugin() {
         let waiting = false
 
         Lampa.Menu.addButton('<svg><use xlink:href="#sprite-shots"></use></svg>', 'Shots', ()=>{
-            if(waiting) return
+            let present = new Present()
 
-            waiting = true
+            present.onComplete = ()=>{
+                present.onBack = ()=>{}
 
-            let call = (shots)=>{
-                Lampa.Loading.stop()
+                if(waiting) return
 
-                waiting = false
+                let items = [
+                    {
+                        title: Lampa.Lang.translate('shots_watch_roll'),
+                        onSelect: ()=>{
+                            Lampa.Controller.toggle('content')
 
-                let lenta = new Lenta(shots[0], shots)
+                            waiting = true
 
-                lenta.onNext = (page, call)=>{
-                    Api.lenta(page, call)
-                }
+                            let call = (shots)=>{
+                                Lampa.Loading.stop()
 
-                lenta.start()
+                                present.destroy()
+
+                                waiting = false
+
+                                if(shots.length == 0){
+                                    return Lampa.Bell.push({
+                                        icon: '<svg><use xlink:href="#sprite-shots"></use></svg>',
+                                        text: Lampa.Lang.translate('shots_alert_noshots')
+                                    })
+                                }
+
+                                let lenta = new Lenta(shots[0], shots)
+
+                                lenta.onNext = (page, call)=>{
+                                    Roll.next(call)
+                                }
+
+                                lenta.start()
+                            }
+
+                            Lampa.Loading.start(()=>{
+                                waiting = false
+
+                                present.destroy()
+
+                                call = ()=>{}
+
+                                Lampa.Loading.stop()
+                            })
+
+                            Roll.start(call)
+                        }
+                    },
+                    {
+                        title: Lampa.Lang.translate('shots_choose_tags_select'),
+                        separator: true,
+                    }
+                ]
+
+                Tags.list().forEach(tag=>{
+                    items.push({
+                        title: tag.title,
+                        tag: tag,
+                        checkbox: true
+                    })
+                })
+
+                items.push({
+                    title: Lampa.Lang.translate('shots_watch_tags'),
+                    onSelect: ()=>{
+                        Lampa.Controller.toggle('content')
+
+                        let selected_tags = items.filter(a=>a.checked && a.tag).map(a=>a.tag)
+                        let tags_slug     = selected_tags.map(t=>t.slug).join(',')
+
+                        if(selected_tags.length == 0) return Lampa.Bell.push({
+                            icon: '<svg><use xlink:href="#sprite-shots"></use></svg>',
+                            text: Lampa.Lang.translate('shots_alert_no_tags')
+                        })
+
+                        Api.lenta({tags: tags_slug}, (shots)=>{
+                            if(shots.length == 0){
+                                return Lampa.Bell.push({
+                                    icon: '<svg><use xlink:href="#sprite-shots"></use></svg>',
+                                    text: Lampa.Lang.translate('shots_alert_noshots')
+                                })
+                            }
+
+                            let lenta = new Lenta(shots[0], shots)
+
+                            lenta.onNext = (page, call)=>{
+                                Api.lenta({tags: tags_slug, page: page}, call)
+                            }
+
+                            lenta.start()
+                        })
+                    }
+                })
+
+                Lampa.Select.show({
+                    title: Lampa.Lang.translate('Shots'),
+                    items: items,
+                    onBack: ()=>{
+                        Lampa.Controller.toggle('content')
+                    }
+                })
             }
 
-            Lampa.Loading.start(()=>{
-                waiting = false
+            present.onBack = ()=>{
+                present.destroy()
 
-                call = ()=>{}
+                Lampa.Controller.toggle('content')
+            }
 
-                Lampa.Loading.stop()
-            })
-
-            Api.lenta(1, call)
+            present.start()
         })
     }
 
@@ -187,4 +283,4 @@ function startPlugin() {
     }
 }
 
-if(!window.plugin_shots_ready) startPlugin()
+if(!window.plugin_shots_ready && Lampa.Lang.selected(['ru','uk','be'])) startPlugin()

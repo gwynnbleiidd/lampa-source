@@ -20,6 +20,10 @@ let last
 let scroll
 let visible_timer
 
+function menuAlwaysVisible(){
+    return Platform.screen('tv') && Storage.field('menu_always')
+}
+
 let menu_items = [
     {action: 'main', title: 'menu_main', sprite: 'home'},
     {action: 'feed', title: 'menu_feed', sprite: 'feed'},
@@ -97,9 +101,11 @@ function init(){
         gone: ()=>{
             $('body').toggleClass('menu--open',false)
 
-            visible_timer = setTimeout(()=>{
-                $('.wrap__left').addClass('wrap__left--hidden')
-            },300)
+            if(!menuAlwaysVisible()){
+                visible_timer = setTimeout(()=>{
+                    $('.wrap__left').addClass('wrap__left--hidden')
+                },300)
+            }
         },
         back: ()=>{
             Activity.backward()
@@ -115,6 +121,10 @@ function init(){
 
     scroll.minus()
     scroll.append(html)
+
+    if(menuAlwaysVisible()){
+        $('.wrap__left').removeClass('wrap__left--hidden')
+    }
 
     // Отправка события для плагинов
     Lampa.Listener.send('menu',{type:'end'})
@@ -341,17 +351,6 @@ function catalog(){
                     genres: a.id,
                     id: a.id
                 })
-
-                // Activity.push({
-                //     url: Storage.field('source') == 'tmdb' ? 'movie' : 'movie',
-                //     title: (a.title || Lang.translate('title_catalog')) + ' - ' + Storage.field('source').toUpperCase(),
-                //     component: tmdb ? 'category' : 'category_full',
-                //     genres: a.id,
-                //     id: a.id,
-                //     source: Storage.field('source'),
-                //     card_type: true,
-                //     page: 1
-                // })
             },
             onBack: open
         })
@@ -380,7 +379,7 @@ function addElement(element, action){
  * @returns {JQuery} Добавленная кнопка меню
  */
 function addButton(svg_icon, title, action){
-    return addElement($(`<div class="menu__item selector"><div class="menu__ico">${svg_icon}</div><div class="menu__text">${title}</div></div>`), action)
+    return addElement($(`<li class="menu__item selector"><div class="menu__ico">${svg_icon}</div><div class="menu__text">${title}</div></li>`), action)
 }
 
 /**

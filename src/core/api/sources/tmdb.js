@@ -100,14 +100,16 @@ let keywords = {
 function url(u, params = {}){
     let ln = [Storage.field('tmdb_lang')]
 
+    let genre = params.genres
+        
+    if(Permit.child_small) genre = genre ? genre + (genre == '16' ? '' : ',16') : '16'
+
     if(params.langs) ln = typeof params.langs == 'string' ? [params.langs] : ln.concat(params.langs.filter(n=>n !== ln[0]))
 
     u = add(u, 'api_key='+TMDB.key())
     u = add(u, 'language='+ln.join(','))
 
-    if(Permit.token && Permit.account.profile && Permit.account.profile.child) u = add(u, 'certification_country=RU&certification.lte=18')
-
-    if(params.genres && u.indexOf('with_genres') == -1)  u = add(u, 'with_genres='+params.genres)
+    if(genre && u.indexOf('with_genres') == -1)  u = add(u, 'with_genres='+genre)
     if(params.page)    u = add(u, 'page='+params.page)
     if(params.query)   u = add(u, 'query='+params.query)
     if(params.keywords)u = add(u, 'with_keywords='+params.keywords)
@@ -136,40 +138,97 @@ function add(u, params){
     return u + (/\?/.test(u) ? '&' : '?') + params;
 }
 
-function get(method, params = {}, oncomplite, onerror, cache = false){
-    let u = url(method, params)
-    let s = method.match(/tv\/(\d+)\/season\/(\d+)/)
-    
-    network.timeout(1000 * 10)
-    network.silent(u,(json)=>{
-        json.url    = method
-        json.source = source
+function get(method, params = {}, oncomplete, onerror, cache = false) {
+    const lang = Storage.field('tmdb_lang');
+    const u = url(method, { ...params });
+    const s = method.match(/tv\/(\d+)\/season\/(\d+)/);
 
-        // Исправляем сезоны для сериалов
-        if(s && s[2] == 1){
-            let seasons = Utils.splitEpisodesIntoSeasons(json.episodes)
+    network.timeout(1000 * 10);
 
-            // Считаем количество реальных сезонов и отмечаем в объекте
-            json.seasons_count = Arrays.getKeys(seasons).length
+    network.silent(u, (json) => {
+        if (!json) return onerror && onerror();
+        json.url = method;
+        json.source = source;
 
-            // Если есть 1й сезон, то заменяем эпизоды на него
-            if(seasons[1]){
-                // Оставляем оригинальные эпизоды на случай, если понадобятся все эпизоды
-                json.episodes_original = json.episodes
-
-                // Заменяем данные на 1й сезон
-                json.episodes = seasons[1]
-            } 
+        if (s && s[2] == 1) {
+            const seasons = Utils.splitEpisodesIntoSeasons(json.episodes);
+            json.seasons_count = Arrays.getKeys(seasons).length;
+            if (seasons[1]) {
+                json.episodes_original = json.episodes;
+                json.episodes = seasons[1];
+            }
         }
 
-        oncomplite(Utils.addSource(json, source))
-    }, ()=>{
-        // Если сезон не найден, то пробуем найти правильный сезон из 1го сезона
-        if(s) seasonFix(parseInt(s[2]), method, params = {}, oncomplite, onerror, cache)
-        else if(onerror) onerror()
-    }, false, {
-        cache: cache
-    })
+        if (lang === 'en' || params.__fb === true) {
+            return oncomplete(Utils.addSource(json, source));
+        }
+
+        const empty = (v) => typeof v === 'string' && !v.trim();
+        const needItem = (i) => i && (i.title || i.name) === (i.original_title || i.original_name);
+        const list = json.results || json.parts;
+        const isList = Array.isArray(list);
+        const isPersonPage = method.startsWith('person/');
+
+        const fbParams = { ...params, __fb: true, langs: 'en' };
+        get(method, fbParams, (enjson) => {
+            const patch = (a, b) => {
+                if (!a || !b) return;
+                const map = b.reduce((acc, i) => { acc[i.id] = i; return acc; }, {});
+                a.forEach(i => {
+                    const e = map[i.id];
+                    if (e) {
+                        if (needItem(i)) {
+                            if (e.title) i.title = e.title;
+                            if (e.name) i.name = e.name;
+                        }
+                        if (!i.overview && e.overview) i.overview = e.overview;
+                        if (!i.tagline && e.tagline) i.tagline = e.tagline;
+                    }
+                });
+            };
+
+            patch(json.results, enjson.results);
+            patch(json.parts, enjson.parts);
+            patch(json.cast, enjson.cast);
+            patch(json.crew, enjson.crew);
+
+            if (needItem(json)) {
+                if (enjson.title) json.title = enjson.title;
+                if (enjson.name) json.name = enjson.name;
+            }
+            if (empty(json.overview) && enjson.overview) json.overview = enjson.overview;
+            if (empty(json.tagline) && enjson.tagline) json.tagline = enjson.tagline;
+            if (empty(json.biography) && enjson.biography) json.biography = enjson.biography;
+            if (isPersonPage && enjson.name) json.name = enjson.name;
+
+            const handleList = (list) => {
+                let pending = list.length;
+                if (!pending) return oncomplete(Utils.addSource(json, source));
+
+                list.forEach(i => {
+                    if (needItem(i) || empty(i.overview)) {
+                        const type = method.startsWith('movie') ? 'movie' : 'tv';
+                        get(`${type}/${i.id}`, { __fb: true, langs: 'en' }, enItem => {
+                            if (enItem.title) i.title = enItem.title;
+                            if (enItem.name) i.name = enItem.name;
+                            if (enItem.overview) i.overview = enItem.overview;
+                            if (--pending === 0) oncomplete(Utils.addSource(json, source));
+                        }, () => { if (--pending === 0) oncomplete(Utils.addSource(json, source)); }, cache);
+                    } else {
+                        if (--pending === 0) oncomplete(Utils.addSource(json, source));
+                    }
+                });
+            };
+
+            isList ? handleList(list) : oncomplete(Utils.addSource(json, source));
+
+        }, onerror, cache);
+
+    }, () => {
+        if (s) {
+            seasonFix(parseInt(s[2]), method, params, oncomplete, onerror, cache);
+        } else if (onerror) onerror();
+    }, false, { cache });
 }
 
 function img(src, size){
@@ -453,7 +512,7 @@ function category(params = {}, oncomplite, onerror){
     ]
 
     // Дух Рождества
-    Arrays.insert(parts_data, 1, Api.partKeyword({id: 207317, title: '#{filter_keyword_christmas}'}, params.url, params))
+    //Arrays.insert(parts_data, 1, Api.partKeyword({id: 207317, title: '#{filter_keyword_christmas}'}, params.url, params))
 
     ContentRows.call('category', params, parts_data)
 
@@ -518,7 +577,7 @@ function category(params = {}, oncomplite, onerror){
 }
 
 function full(params = {}, oncomplite, onerror){
-    let status = new Status(8)
+    let status = new Status(9)
         status.onComplite = oncomplite
 
     if(Utils.dcma(params.method, params.id)) return onerror()
@@ -529,6 +588,17 @@ function full(params = {}, oncomplite, onerror){
         if(json.external_ids){
             json.imdb_id = json.external_ids.imdb_id
         }
+		
+        if (!json.overview?.trim() && Storage.field('tmdb_lang') !== 'en') {
+            get(params.method + '/' + params.id, { langs: 'en' }, (enjson) => {
+                if (enjson.overview?.trim()) json.overview = enjson.overview
+
+                status.need--
+
+                status.check()
+            }, status.error.bind(status), { life: day * 7 })
+        }
+        else status.need--
         
         if(params.method == 'tv'){
             let season = Utils.countSeasons(json)
@@ -555,27 +625,37 @@ function full(params = {}, oncomplite, onerror){
         status.error()
     }, {life: day * 7})
 
-    get(params.method+'/'+params.id+'/credits',params,(json)=>{
-        status.append('persons', json)
-    },status.error.bind(status), {life: day * 7})
+    if(!Permit.child_small){
+        get(params.method+'/'+params.id+'/credits',params,(json)=>{
+            status.append('persons', json)
+        },status.error.bind(status), {life: day * 7})
 
-    get(params.method+'/'+params.id+'/recommendations',params,(json)=>{
-        status.append('recomend', json)
-    },status.error.bind(status), {life: day * 7})
+        get(params.method+'/'+params.id+'/recommendations',params,(json)=>{
+            status.append('recomend', json)
+        },status.error.bind(status), {life: day * 7})
 
-    get(params.method+'/'+params.id+'/similar',params,(json)=>{
-        status.append('simular', json)
-    },status.error.bind(status), {life: day * 7})
+        get(params.method+'/'+params.id+'/similar',params,(json)=>{
+            status.append('simular', json)
+        },status.error.bind(status), {life: day * 7})
 
-    videos(params, (json)=>{
-        status.append('videos', json)
-    },status.error.bind(status))
+        if(!Permit.child){
+            videos(params, (json)=>{
+                status.append('videos', json)
+            },status.error.bind(status))
+        }
+        else{
+            status.need--
+        }
+    }
+    else{
+        status.need -= 4
+    }
 
     Api.sources.cub.reactionsGet(params,(json)=>{
         status.append('reactions', json)
     })
 
-    if(Lang.selected(['ru','uk','be']) && window.lampa_settings.account_use){
+    if(Lang.selected(['ru','uk','be']) && window.lampa_settings.account_use && !Permit.child){
         status.need++
 
         Api.sources.cub.discussGet(params, (json)=>{
@@ -607,14 +687,14 @@ function videos(params = {}, oncomplite, onerror){
     }
 }
 
-function list(params = {}, oncomplite, onerror){
-    let u = url(params.url, params)
-
-    network.silent(u, (data)=>{
-        oncomplite(Utils.addSource(data, source))
-    }, onerror, false, {
-        cache: {life: day * 2}
-    })
+function list(params = {}, oncomplite, onerror) {
+    let u = url(params.url, params);
+    
+    get(params.url, params, (json) => {
+        oncomplite(json);
+    }, onerror, {
+        cache: { life: day * 2 }
+    });
 }
 
 function search(params = {}, oncomplite){

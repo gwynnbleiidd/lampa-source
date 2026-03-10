@@ -6,6 +6,7 @@ import Lang from '../core/lang'
 import Arrays from '../utils/arrays'
 import Head from './head/head'
 import Activity from './activity/activity'
+import Permit from '../core/account/permit'
 
 let timer
 let listener
@@ -39,7 +40,7 @@ function init(){
             }
         },1000)
 
-        if(e.type == 'start' && e.component == 'full'){
+        if(e.type == 'start' && e.component == 'full' && !Permit.child){
             broadcast.show()
 
             activity = e.object
@@ -100,10 +101,17 @@ function open(params){
                     }
 
                     if(params.type == 'play'){
+                        let player = Arrays.clone(params.object.player)
+
+                        delete player.playlist
+
                         Socket.send('other',{
                             params: {
                                 submethod: 'play',
-                                object: params.object
+                                object: {
+                                    player,
+                                    playlist: []
+                                }
                             },
                             uid: device.uid
                         })

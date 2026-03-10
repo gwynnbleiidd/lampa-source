@@ -2,6 +2,8 @@ import Recorder from '../components/recorder.js'
 import Upload from '../components/upload.js'
 import Api from '../utils/api.js'
 import Defined from '../defined.js'
+import Utils from '../utils/utils.js'
+import View from '../utils/view.js'
 
 let button_record = null
 let play_data     = {}
@@ -21,7 +23,7 @@ function init(){
     Lampa.PlayerPanel.render().find('.player-panel__settings').after(button_record)
 
     Lampa.Controller.listener.follow('toggle', (e)=>{
-        if(player_shots) player_shots.toggleClass('focus', e.name == 'player_rewind')
+        if(player_shots) player_shots.toggleClass('focus', e.name == 'player_rewind' || Lampa.Platform.mouse() || Lampa.Utils.isTouchDevice())
     })
 }
 
@@ -38,30 +40,38 @@ function startPlayer(data){
     }
 
     let possibly = true
+    let type     = play_data.card?.original_name ? 'tv' : 'movie'
 
-    if(data.iptv) possibly = false
+    if(data.iptv || data.youtube) possibly = false
     else if(!Lampa.Account.Permit.token) possibly = false
-    else if(Lampa.Storage.field('player') !== 'inner') possibly = false
-    else if(Lampa.Platform.is('apple') && Lampa.Storage.field('player_normalization')) possibly = false
-    else if(/\.m3u8/.test(data.url)){
-        let use_program = Lampa.Storage.field('player_hls_method') == 'hlsjs' || Lampa.Platform.chromeVersion() > 120
-        
-        if(!Hls.isSupported()) use_program = false
-
-        if(!use_program) possibly = false
-    }
+    else if(type == 'tv' && (!data.season || !data.episode)) possibly = false
 
     if(possibly){
         play_data.season     = data.season || 0
         play_data.episode    = data.episode || 0
-        play_data.voice_name = (data.voice_name || '').replace(/\s[^a-zA-Zа-яА-Я0-9].*$/, '').trim()
+        play_data.voice_name = (data.voice_name || '').trim()
 
-        if(play_data.card) button_record.removeClass('hide')
+        setTimeout(()=>{
+            play_data.balanser = Utils.getBalanser(play_data.card || {})
+        },1000)
+
+        if(play_data.card){
+            let year = parseInt((play_data.card.release_date || play_data.card.first_air_date || '----').slice(0,4))
+
+            if(type == 'movie'){
+                let player_title = Lampa.Player.playdata().title || ''
+
+                play_data.voice_name = (play_data.voice_name || player_title || '').trim()
+
+                if(play_data.voice_name == play_data.card.title || play_data.torrent_hash) play_data.voice_name = ''
+            }
+
+            if(!(Utils.isTSQuality(play_data.voice_name) || Utils.isTSQuality(Lampa.Player.playdata().title)) && year >= 1985) button_record.removeClass('hide')
+        }
     }
 
     if(play_data.card && (play_data.card.source == 'tmdb' || play_data.card.source == 'cub')){
-        playerShotsSegments()
-        //playerShotsFooter()
+        if(Lampa.Storage.field('shots_in_player')) playerShotsSegments()
     }
 }
 
@@ -74,25 +84,54 @@ function stopPlayer(){
     }
 
     playerPanel(true)
+
+    if(play_data.need_tocontent){
+        setTimeout(()=>{
+            Lampa.Controller.toggle('content')
+        }, 100)
+    }
 }
 
 function playerShotsSegments(){
+    let type  = play_data.card.original_name ? 'tv' : 'movie'
     let video = Lampa.PlayerVideo.video()
 
+    if(type == 'tv' && (!play_data.season || !play_data.episode)) return
+
     video.addEventListener('loadeddata', ()=>{
-        Api.shotsCard(play_data.card, 1, (data)=>{
+        View.load(play_data.card, (shots)=>{
             if(!Lampa.Player.opened()) return
 
-            let type = play_data.card.original_name ? 'tv' : 'movie'
-
             if(type == 'tv' && play_data.season && play_data.episode){
-                data.results = data.results.filter((e)=>e.season == play_data.season && e.episode == play_data.episode)
+                shots = shots.filter((e)=>e.season == play_data.season && e.episode == play_data.episode)
             }
 
-            if(data.results.length){
+            if(shots.length){
                 player_shots = $('<div class="shots-player-segments"></div>')
 
-                data.results.forEach((elem)=>{
+                player_shots.toggleClass('focus', Lampa.Platform.mouse() || Lampa.Utils.isTouchDevice())
+
+                shots = shots.filter(s=>{
+                    // сортируем по start_point один раз и используем временные поля на массиве
+                    if(!shots._sorted){
+                        shots.sort((a,b)=> (Number(a.start_point)||0) - (Number(b.start_point)||0));
+                        shots._sorted = true;
+                        shots._last_end = -Infinity;
+                    }
+
+                    let start = Number(s.start_point || 0)
+                    let end   = Number(s.end_point || start)
+
+                    // если перекрывается с предыдущим включённым — исключаем
+                    if(start < shots._last_end) return false
+
+                    // обновляем край текущего включённого сегмента
+                    shots._last_end = Math.max(shots._last_end, end)
+
+                    return true
+                })
+
+                shots.forEach((elem)=>{
                     let segment = $('<div class="shots-player-segments__time"></div>')
                     let picture = $('<div class="shots-player-segments__picture"><img src="'+elem.img+'"></div>')
 
@@ -115,50 +154,16 @@ function playerShotsSegments(){
                     player_shots.append(picture)
 
                     img.src = elem.screen
+
+                    picture.on('click', ()=>{
+                        console.log('click shot', elem, elem.start_point)
+                        Lampa.PlayerVideo.to(elem.start_point)
+                    })
                 })
 
-                Lampa.PlayerPanel.render().find('.player-panel__timeline').append(player_shots)
+                Lampa.PlayerPanel.render().find('.player-panel__timeline').before(player_shots)
             }
         })
-    })
-}
-
-function playerShotsFooter(){
-    Api.shotsCard(play_data.card, 1, (data)=>{
-        let type = play_data.card.original_name ? 'tv' : 'movie'
-
-        if(type == 'tv' && play_data.season && play_data.episode){
-            data.results = data.results.filter((e)=>e.season == play_data.season && e.episode == play_data.episode)
-        }
-
-        if(data.results.length){
-            data.title = 'Shots'
-
-            data.results.forEach((elem)=>{
-                elem.img = elem.screen
-
-                elem.params = {
-                    createInstance: ()=> Lampa.Maker.make('Card', elem, (module)=>module.only('Card', 'Callback','Style')),
-                    style: {
-                        name: 'collection'
-                    },
-                    emit: {
-                        onCreate: function(){
-                            this.html.addClass('shots-player-card')
-                        },
-                        onEnter: ()=>{
-                            Lampa.PlayerVideo.to(elem.start_point)
-                        }
-                    }
-                }
-            })
-
-            let line = Lampa.Maker.make('Line', data, (module)=>module.only('Items', 'Create'))
-
-            line.create()
-
-            Lampa.PlayerFooter.appendRow(line.render(true))
-        }
     })
 }
 
@@ -189,6 +194,12 @@ function closeModal(){
 }
 
 function beforeRecording(){
+    if(Lampa.Modal.opened()){
+        Lampa.Modal.close()
+
+        play_data.need_tocontent = true
+    }
+
     pausePlayer()
 
     let left = Date.now() - Lampa.Storage.get('shots_last_record', '0')
@@ -212,36 +223,29 @@ function beforeRecording(){
         })
     }
 
-    Lampa.Modal.open({
-        html: Lampa.Template.get('shots_modal_before_recording'),
-        size: 'small',
-        scroll: {
-            nopadding: true
-        },
-        buttons: [
-            {
-                name: Lampa.Lang.translate('shots_start_recording'),
-                onSelect: ()=>{
-                    Lampa.Modal.close()
+    Utils.modal(Lampa.Template.get('shots_modal_before_recording'), [
+        {
+            name: Lampa.Lang.translate('shots_start_recording'),
+            onSelect: ()=>{
+                Lampa.Modal.close()
 
-                    startRecording()
-                }
-            },
-            {
-                name: Lampa.Lang.translate('shots_choice_start_point'),
-                onSelect: ()=>{
-                    Lampa.Modal.close()
-
-                    Lampa.Controller.toggle('player_rewind')
-
-                    Lampa.PlayerPanel.visible(true)
-
-                    playerPanel(true)
-                }
+                startRecording()
             }
-        ],
-        onBack: closeModal
-    })
+        },
+        {
+            name: Lampa.Lang.translate('shots_choice_start_point'),
+            cancel: true,
+            onSelect: ()=>{
+                Lampa.Modal.close()
+
+                Lampa.Controller.toggle('player_rewind')
+
+                Lampa.PlayerPanel.visible(true)
+
+                playerPanel(true)
+            }
+        }
+    ], closeModal)
 }
 
 function startRecording(){
@@ -255,63 +259,69 @@ function startRecording(){
 }
 
 function errorRecording(e){
-    Lampa.Modal.open({
-        html: Lampa.Template.get('shots_modal_error_recording'),
-        size: 'small',
-        scroll: {
-            nopadding: true
-        },
-        buttons: [
-            {
-                name: Lampa.Lang.translate('shots_button_good'),
-                onSelect: closeModal
-            }
-        ],
-        onBack: closeModal
-    })
+    Utils.modal(Lampa.Template.get('shots_modal_error_recording'), [
+        {
+            name: Lampa.Lang.translate('shots_button_good'),
+            onSelect: closeModal
+        }
+    ], closeModal)
 }
 
 function stopRecording(recording){
     pausePlayer()
 
     if(recording.duration > 10){
-        let upload = new Upload({
-            recording: recording,
-            play_data: play_data
-        })
+        if(recording.start_point < 60 || recording.end_point > (Lampa.PlayerVideo.video().duration - 60 * 5)){
+            recording.near_border = true
 
-        upload.onCancel = ()=>{
-            Lampa.Controller.toggle('player')
+            Utils.modal(Lampa.Template.get('shots_modal_before_upload_recording'), [
+                {
+                    name: Lampa.Lang.translate('shots_button_choice_fragment'),
+                    onSelect: closeModal
+                },
+                {
+                    name: Lampa.Lang.translate('shots_button_continue_upload'),
+                    onSelect: ()=>{
+                        Lampa.Modal.close()
 
-            Lampa.PlayerVideo.pause()
+                        startUploadRecording(recording)
+                    }
+                }
+            ], closeModal)
         }
-
-        upload.onComplete = ()=>{
-            Lampa.Controller.toggle('player')
-
-            Lampa.PlayerVideo.pause()
-        }
-
-        upload.start()
+        else startUploadRecording(recording)
     }
     else shortRecording()
 }
 
-function shortRecording(){
-    Lampa.Modal.open({
-        html: Lampa.Template.get('shots_modal_short_recording'),
-        size: 'small',
-        scroll: {
-            nopadding: true
-        },
-        buttons: [
-            {
-                name: Lampa.Lang.translate('shots_button_good'),
-                onSelect: closeModal
-            }
-        ],
-        onBack: closeModal
+function startUploadRecording(recording){
+    let upload = new Upload({
+        recording: recording,
+        play_data: play_data
     })
+
+    upload.onCancel = ()=>{
+        Lampa.Controller.toggle('player')
+
+        Lampa.PlayerVideo.pause()
+    }
+
+    upload.onComplete = ()=>{
+        Lampa.Controller.toggle('player')
+
+        Lampa.PlayerVideo.pause()
+    }
+
+    upload.start()
+}
+
+function shortRecording(){
+    Utils.modal(Lampa.Template.get('shots_modal_short_recording'), [
+        {
+            name: Lampa.Lang.translate('shots_button_good'),
+            onSelect: closeModal
+        }
+    ], closeModal)
 }
 
 export default {
