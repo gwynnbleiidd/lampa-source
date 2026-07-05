@@ -13,6 +13,8 @@ import Template from '../../../interaction/template'
 import LineModule from '../../../interaction/items/line/module/module'
 import ContentRows from '../../content_rows'
 import Permit from '../../account/permit'
+import VPN from '../../../core/vpn'
+import Keys from '../../tmdb/keys'
 
 let network = new Reguest()
 let day     = 60 * 24
@@ -48,6 +50,19 @@ function get(method, params = {}, oncomplite, onerror, cache = false){
     network.silent(u,(json)=>{
         json.url = method
         json.source = source
+
+        // Фильтруем результаты по ключевым словам, чтобы не показывать фильмы с неуместными словами в названии
+        if(json.results && Arrays.isArray(json.results)){
+            json.results = json.results.filter(item => {
+                let title = (item.title || item.name || '').toLowerCase()
+
+                return !Keys.filter.find(word => {
+                    let reg = new RegExp(word, 'i')
+                    
+                    return reg.test(title)
+                })
+            })
+        }
 
         oncomplite(Utils.addSource(json, source))
     }, onerror, false, {
@@ -444,7 +459,7 @@ function category(params = {}, oncomplite, onerror){
 }
 
 function full(params, oncomplite, onerror){
-    let status = new Status(8)
+    let status = new Status(9)
         status.onComplite = oncomplite
 
     if(Utils.dcma(params.method, params.id)) return onerror()
@@ -453,6 +468,17 @@ function full(params, oncomplite, onerror){
         if(json.status_code) return status.stop(),onerror()
 
         json.source = 'cub'
+		
+		if (!json.overview?.trim() && Storage.field('tmdb_lang') !== 'en') {
+			TMDB.get(params.method + '/' + params.id, { langs: 'en' }, (enjson) => {
+				if (enjson.overview?.trim()) json.overview = enjson.overview
+				
+				status.need--
+				
+				status.check()
+			}, status.error.bind(status), { life: day * 7 })
+		}
+		else status.need--
 
         if(params.method == 'tv'){
             let season = Utils.countSeasons(json)
@@ -516,6 +542,14 @@ function full(params, oncomplite, onerror){
             status.append('discuss', json)
         },status.error.bind(status))
     }
+
+    if(Lang.selected(['ru','uk','be'])){
+        status.need++
+
+        metadataGet(params, (json)=>{
+            status.append('metadata', json)
+        },status.error.bind(status))
+    }
 }
 
 function trailers(type, oncomplite){
@@ -534,6 +568,14 @@ function trailers(type, oncomplite){
     },()=>{
         oncomplite({results: []})
     }, false, {cache:  {life: day * 2}})
+}
+
+function metadataGet(params, oncomplite){
+    if(window.lampa_settings.disable_features.metadata) return oncomplite({})
+    
+    network.silent(Utils.protocol() + Manifest.cub_domain + '/api/ai/metadata/' + params.id + '/' + params.method, oncomplite,()=>{
+        oncomplite({})
+    }, false, {timeout: 1000 * 5})
 }
 
 function reactionsGet(params, oncomplite){
@@ -706,6 +748,7 @@ export default {
     discovery,
     reactionsGet,
     reactionsAdd,
+    metadataGet,
     discussGet,
     extensions
 }

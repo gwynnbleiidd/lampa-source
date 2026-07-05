@@ -13,6 +13,8 @@ import Template from '../../../interaction/template'
 import LineModule from '../../../interaction/items/line/module/module'
 import Router from '../../router'
 import Permit from '../../account/permit'
+import VPN from '../../../core/vpn'
+import Keys from '../../tmdb/keys'
 
 
 let network   = new Reguest()
@@ -162,6 +164,19 @@ function get(method, params = {}, oncomplite, onerror, cache = false){
                 // Заменяем данные на 1й сезон
                 json.episodes = seasons[1]
             } 
+        }
+
+        // Фильтруем результаты по ключевым словам, чтобы не показывать фильмы с неуместными словами в названии
+        if(json.results && Arrays.isArray(json.results)){
+            json.results = json.results.filter(item => {
+                let title = (item.title || item.name || '').toLowerCase()
+
+                return !Keys.filter.find(word => {
+                    let reg = new RegExp(word, 'i')
+                    
+                    return reg.test(title)
+                })
+            })
         }
 
         oncomplite(Utils.addSource(json, source))

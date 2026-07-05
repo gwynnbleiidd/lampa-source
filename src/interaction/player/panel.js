@@ -169,7 +169,7 @@ function init(){
 
     html.find('.player-panel__settings').on('hover:enter',settings)
 
-    html.find('.player-panel__pip,.player-panel__volume').toggleClass('hide',!Boolean(Platform.is('nw') || Platform.is('browser') || (Platform.is('apple') && !Utils.isPWA())))
+    html.find('.player-panel__pip,.player-panel__volume').toggleClass('hide',!Boolean(Platform.desktop() || Platform.is('browser') || (Platform.is('apple') && !Utils.isPWA())))
 
     html.find('.player-panel__pip').on('hover:enter',()=>{
         listener.send('pip',{})
@@ -459,23 +459,25 @@ function init(){
     })
 
     Video.listener.follow('loadeddata', drawSegments)
+    Segments.listener.follow('set', drawSegments)
 }
 
 function drawSegments(){
     let segments = Segments.all()
     let timeline = elems.segments.empty()
+    let video    = Video.video()
+    let duration = video && video.duration ? video.duration : 0
 
     for(let name in segments){
         for(let a = 0; a < segments[name].length; a++){
             let seg      = segments[name][a]
             let seg_elem = $(`<div class="player-panel__timeline-segment player-panel__timeline-segment--${name}"></div>`)
-            let duration = Video.video().duration || 0
 
             let r_start = Math.min(duration, seg.start)
             let r_end   = Math.min(duration, seg.end)
             
-            let start    = r_start / duration * 100
-            let length   = (r_end - r_start) / duration * 100
+            let start    = duration ? r_start / duration * 100 : 0
+            let length   = duration ? (r_end - r_start) / duration * 100 : 0
 
             seg_elem.css({
                 left: duration ? start + '%' : 0,

@@ -43,6 +43,7 @@ function Keyboard(params = {}){
     let last_value
     let height = window.innerHeight
     let mobile = Platform.screen('mobile') && params.textarea
+    let is_electron = Platform.is('electron')
 
     if(params.keyboard){
         simple = params.keyboard !== 'lampa'
@@ -180,12 +181,14 @@ function Keyboard(params = {}){
                 if(time_blur + 1000 < Date.now()) {
                     if (Platform.is('orsay')) ime.onShow() 
                     input.focus()
+
+                    if(Platform.is('apple_tv')) window.location.assign('lampa://openkeyboard')
                 }
             })
 
             let keyboard = $('.simple-keyboard')
 
-            if(!Platform.is('orsay') && (window.SpeechRecognition || window.webkitSpeechRecognition) && !params.nomic && Platform.screen('tv')){
+            if(!is_electron && !Platform.is('orsay') && !Platform.is('apple_tv') && (window.SpeechRecognition || window.webkitSpeechRecognition) && !params.nomic && Platform.screen('tv')){
                 let mic = $(`<div class="selector simple-keyboard-mic">
                     <svg viewBox="0 0 24 31" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="5" width="14" height="23" rx="7" fill="currentColor"/>
@@ -218,7 +221,7 @@ function Keyboard(params = {}){
 
             if(mobile) keyboard.addClass('simple-keyboard--with-textarea')
 
-            if(Platform.screen('mobile')){
+            if(Platform.screen('mobile') || Platform.mouse()){
                 let buttons = $('<div class="simple-keyboard-buttons"><div class="simple-keyboard-buttons__enter">'+Lang.translate('ready')+'</div><div class="simple-keyboard-buttons__cancel">'+Lang.translate('cancel')+'</div></div>')
 
                 buttons.find('.simple-keyboard-buttons__enter').on('click',()=>{
@@ -239,6 +242,12 @@ function Keyboard(params = {}){
         else{
             let layout = typeof params.layout == 'string' ? Layers.get(params.layout) : params.layout || Layers.get('default')
             let press  = Date.now()
+
+            if(is_electron){
+                Arrays.getKeys(layout).forEach((code)=>{
+                    layout[code] = layout[code].map((row)=>row.replace('{MIC}', '').replace(/\s{2,}/g, ' ').trim())
+                })
+            }
 
             _keyBord = new _keyClass({
                 display: {
@@ -269,6 +278,8 @@ function Keyboard(params = {}){
 
                     if (button === "{SHIFT}" || button === "{SIM}" || button === "{ABC}") this._handle(button)
                     else if(button === '{MIC}'){
+                        if(is_electron) return
+
                         if(Platform.is('android')){
                             Android.voiceStart()
 
@@ -366,6 +377,7 @@ function Keyboard(params = {}){
     }
 
     this.speechRecognition = function(){
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
 
         console.log('Speech', 'status:', SpeechRecognition ? true : false)

@@ -122,7 +122,6 @@ import feed_head from '../templates/feed/head'
 import feed_episode from '../templates/feed/episode'
 import register from '../templates/register'
 import speedtest from '../templates/speedtest'
-import ad_bot from '../templates/ad/bot'
 import ad_video_block from '../templates/ad/video'
 import discuss_rules from '../templates/discuss_rules'
 import bookmarks_folder from '../templates/bookmarks_folder'
@@ -131,7 +130,7 @@ import plugins_rules from '../templates/plugins_rule'
 import remote_helper from '../templates/remote_helper'
 import watched_history from '../templates/watched_history'
 import icons_sprite from '../templates/icons/sprite'
-
+import warning from '../templates/warning'
 
 
 let templates = {
@@ -257,7 +256,6 @@ let templates = {
     season_episode,
     season_episode_rate,
     season_info,
-    ad_bot,
     ad_video_block,
     discuss_rules,
     bookmarks_folder,
@@ -265,7 +263,8 @@ let templates = {
     plugins_rules,
     remote_helper,
     watched_history,
-    icons_sprite
+    icons_sprite,
+    warning
 }
 
 let created = {}

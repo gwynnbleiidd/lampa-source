@@ -163,31 +163,37 @@ function init(){
     }
     else if(Platform.is('apple_tv')){
         select('player',{
+            'tvospro': '#{settings_param_player_inner_tvos} tvOS Pro',
             'tvos': '#{settings_param_player_inner_tvos} tvOS Universal',
             'tvosl': '#{settings_param_player_inner_tvos} tvOS Online',
             'tvosSelect': '#{settings_param_player_outside}',
             'vlc': 'VLC',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'inner': '#{settings_param_player_inner}',
             'svplayer': 'SVPlayer'
         },'tvos')
 
         select('player_iptv',{
+            'tvospro': '#{settings_param_player_inner_tvos} tvOS Pro',
             'tvos': '#{settings_param_player_inner_tvos} tvOS Universal',
             'tvosl': '#{settings_param_player_inner_tvos} tvOS Online',
             'tvosSelect': '#{settings_param_player_outside}',
             'vlc': 'VLC',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'inner': '#{settings_param_player_inner}',
             'svplayer': 'SVPlayer'
         },'inner')
 
         select('player_torrent',{
+            'tvospro': '#{settings_param_player_inner_tvos} tvOS Pro',
             'tvos': '#{settings_param_player_inner_tvos} tvOS Universal',
             'tvosSelect': '#{settings_param_player_outside}',
             'infuse': 'Infuse',
+            'senplayer': 'SenPlayer',
             'vidhub': 'Vidhub',
             'vlc': 'VLC',
             'inner': '#{settings_param_player_inner}',
@@ -251,6 +257,8 @@ function init(){
         'http': '#{settings_param_no}',
         'https': '#{settings_param_yes}',
     }, 'https')
+
+    trigger('request_caching', Platform.is('orsay') || Platform.is('netcast') ? false : true)
 }
 
 /**
@@ -455,12 +463,39 @@ function update(elem,elems,elems_html){
             $(this).toggleClass('hide', $(this).data('visible-value') !== key)
         })
 
-        parent.filter('[data-visible-value-in]').each(function(){
-            $(this).toggleClass('hide', !key.toLowerCase().includes($(this).data('visible-value-in').toLowerCase()))
-        })
+        parent.filter('[data-visible-value-in]').each(function() {
+            const valueStr = this.getAttribute('data-visible-value-in');
+            const valueList = valueStr.split(',').map(function (item) {
+                return item.trim().toLowerCase();
+            });
+
+            let isVisible = false;
+            for (let i = 0; i < valueList.length; i++) {
+                if (key.toLowerCase().indexOf(valueList[i]) !== -1) {
+                    isVisible = true;
+                    break;
+                }
+            }
+
+            $(this).toggleClass('hide', !isVisible);
+        });
 
         listener.send('update_scroll_position')
     }
+
+    updateInfuseLaunchVisibility(elems_html)
+}
+
+function isInfusePlayerSelected(){
+    return ['player', 'player_iptv', 'player_torrent'].some((name)=>{
+        return Storage.field(name) === 'infuse'
+    })
+}
+
+function updateInfuseLaunchVisibility(elems_html){
+    if(!elems_html || !elems_html.length) return
+
+    elems_html.find('[data-infuse-launch]').toggleClass('hide', !isInfusePlayerSelected())
 }
 
 /**
@@ -565,7 +600,9 @@ select('parse_lang',{
 select('parse_timeout',{
     '15': '15',
     '30': '30',
-    '60': '60'
+    '60': '60',
+    '90': '90',
+    '120': '120'
 },'15')
 
 select('player_rewind',{
@@ -583,6 +620,12 @@ select('player_timecode',{
     'continue': '#{settings_param_player_timecode_continue}',
     'ask': '#{settings_param_player_timecode_ask}',
 },'continue')
+
+select('infuse_launch_mode', {
+    'ask': '#{settings_infuse_launch_ask}',
+    'play': '#{settings_infuse_launch_play}',
+    'save_and_play': '#{settings_infuse_launch_save_and_play}',
+}, 'play')
 
 select('player_scale_method',{
     'transform': 'Transform',
@@ -700,6 +743,7 @@ trigger('parser_use',false)
 trigger('cloud_use',false)
 trigger('account_use',false)
 trigger('torrserver_auth',false)
+trigger('torrserver_gts', false)
 trigger('mask',true)
 trigger('playlist_next',true)
 trigger('internal_torrclient', true)
@@ -724,11 +768,9 @@ trigger('card_interfice_cover', true)
 trigger('card_interfice_reactions', true)
 trigger('cache_images', false)
 trigger('interface_sound_play', false)
-trigger('request_caching', true)
 trigger('menu_always', false)
-trigger('vlc_fullscreen', true)
-
-
+trigger('player_external_fullscreen', true)
+trigger('adult_content_view', false)
 
 /**
  * Добовляем поля
@@ -753,8 +795,6 @@ select('device_name','','Lampa')
 select('player_nw_path','','C:/Program Files/VideoLAN/VLC/vlc.exe')
 select('tmdb_proxy_api','','')
 select('tmdb_proxy_image','','')
-// Настройки VLC API
-select('vlc_api_password', '', '123456')
 
 export default {
     listener,

@@ -95,7 +95,6 @@ import Bell from './interaction/bell'
 import HoverSwitcher from './core/switcher'
 import Ai from './core/api/sources/ai'
 import Mirrors from './core/mirrors'
-import HTTPS from './core/https'
 import Task from './core/loading'
 import App from './interaction/app'
 import LoadingProgress from './interaction/loading_progress'
@@ -119,9 +118,11 @@ import ServiceMetric from './services/metric'
 import ServiceDeveloper from './services/developer'
 import ServiceRemoteFavorites from './services/remote_favorites'
 import ServiceDMCA from './services/dmca'
+import ServiceLGBT from './services/lgbt'
 import ServiceFPS from './services/fps'
 import ServiceEvents from './services/events'
 import ServiceChildren from './services/children'
+import ServiceRemoteConfiguration from './services/remote_configuration'
 
 window.screen_width  = window.innerWidth
 window.screen_height = window.innerHeight
@@ -137,7 +138,6 @@ if(typeof window.lampa_settings == 'undefined'){
 let torrents_use = true
 let agent        = navigator.userAgent.toLowerCase()
 let conditions   = [
-    agent.indexOf("ipad") > -1 && window.innerWidth == 1920 && window.innerHeight == 1080,
     agent.indexOf("lampa_client_yasha") > -1,
     typeof AndroidJS !== 'undefined' && (AndroidJS.appVersion() + '').toLowerCase().indexOf('rustore') > -1 && !localStorage.getItem('parser_use')
 ]
@@ -174,6 +174,8 @@ Arrays.extend(window.lampa_settings,{
     disable_features: {
         // Блокировку карточек
         dmca: false,
+        // Блокировка ЛГБТ-контента
+        lgbt: false,
         // Реакции
         reactions: false,
         // Обсуждения
@@ -191,7 +193,9 @@ Arrays.extend(window.lampa_settings,{
         // Трейлеры
         trailers: false,
         // Установка прокси для запросов
-        install_proxy: false
+        install_proxy: false,
+        // Удаленная конфигурация
+        remote_configuration: false
     },
 
     // Подключить другие языки интерфейса, по умолчанию только русский и английский
@@ -205,6 +209,9 @@ Arrays.extend(window.lampa_settings,{
 
     // Добавить список блокировки карточек, пример: [{"id":3566556,"cat":"movie"},...]
     dcma: false,
+
+    // Добавить блокировку ЛГБТ контента, пример: [{"id":3566556,"type":"movie"},...]
+    lgbt: false,
 
     // Добавлять в адресную строку название текущего экрана
     push_state: true,
@@ -505,9 +512,6 @@ function startApp(){
     Timeline.init()
     LoadingProgress.status('Timeline init')
 
-    HTTPS.init()
-    LoadingProgress.status('HTTPS init')
-
     Mirrors.init()
     LoadingProgress.status('Mirrors init')
 
@@ -695,8 +699,14 @@ function startApp(){
     ServiceLibs.init()
     LoadingProgress.status('ServiceLibs init')
 
+    ServiceLGBT.init()
+    LoadingProgress.status('ServiceLGBT init')
+
     ServiceChildren.init()
     LoadingProgress.status('ServiceChildren init')
+
+    ServiceRemoteConfiguration.init()
+    LoadingProgress.status('ServiceRemoteConfiguration init')
 
     // Обновляем слои
 
@@ -802,6 +812,23 @@ function loadTask(){
 
     Task.secondary(()=>{
         setTimeout(showApp, 5000)
+    })
+
+    // todo: потом удалить, это костыль для исправления старых адресов джакетта 
+    Task.secondary(()=>{
+        let tsl1 = window.localStorage.getItem('jackett_url') || ''
+        let tsl2 = window.localStorage.getItem('jackett_url_two') || ''
+
+        try{
+            if(tsl1.toLowerCase() == 'jacred.xyz'){
+                window.localStorage.setItem('jackett_url', 'jac.red')
+            }
+
+            if(tsl2.toLowerCase() == 'jacred.xyz'){
+                window.localStorage.setItem('jackett_url_two', 'jac.red')
+            }
+        }
+        catch(e){}
     })
 
     Task.secondary(()=>{

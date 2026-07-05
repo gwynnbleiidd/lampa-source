@@ -313,6 +313,8 @@ function fixMirrorLink(u){
 }
 
 function shortText(fullStr, strLen, separator){
+    fullStr = fullStr + ''
+
     if (fullStr.length <= strLen) return fullStr;
     
     separator = separator || '...';
@@ -328,7 +330,9 @@ function shortText(fullStr, strLen, separator){
 }
 
 function protocol(){
-    return window.location.protocol == 'https:' ? 'https://' : (localStorage.getItem('protocol') || 'https') + '://'
+    let prot = Storage.get('protocol') || 'https'
+
+    return window.location.protocol == 'https:' ? 'https://' : prot + '://'
 }
 
 
@@ -775,43 +779,46 @@ function filterCardsByType(items, need){
     return filtred
 }
 
-function buildUrl(baseUrl, path, queryParams) {
-    // Убираем все, что идет после хоста (например, /ts)
-    var host = baseUrl.split('/').slice(0, 3).join('/');
+ function buildUrl(baseUrl, path, queryParams) {
+        // Убираем /ts на конце, если он есть (для совместимости с TorrServer)
+        var cleanUrl = baseUrl.replace(/\/ts\/?$/, '');
 
-    // Убираем лишние "/" в начале и конце пути
-    var url = host + '/' + path.replace(/^\/+/, '');
+        // Убираем лишние "/" в начале и конце пути, сохраняя subpath
+        var url = cleanUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 
-    // Формируем строку запроса из массива объектов
-    var queryString = queryParams
-        .map(function(param) {
-            return encodeURIComponent(param.name) + '=' + encodeURIComponent(param.value);
-        })
-        .join('&');
+        // Формируем строку запроса из массива объектов
+        var queryString = queryParams
+            .map(function(param) {
+                return encodeURIComponent(param.name) + '=' + encodeURIComponent(param.value);
+            })
+            .join('&');
 
-    // Добавляем строку запроса к URL, если есть параметры
-    return url + (queryString ? '?' + queryString : '');
-}
+        // Добавляем строку запроса к URL, если есть параметры
+        return url + (queryString ? '?' + queryString : '');
+    }
 
 function simpleMarkdownParser(input) {
-    // Обработка заголовков #
-    input = input.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-    input = input.replace(/^#+ (.*$)/gim, '<h4>$1</h4>');
+    // Удаление заголовков с маркером списка
+    input = input.replace(/\* #{1,} /gim, '* ');
 
-    // Обработка жирного текста **текст**
+    // Жирный текст первым, чтобы ** не мешал распознаванию * как маркера списка
     input = input.replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>');
 
-    // Обработка списков * пункт
-    input = input.replace(/^\* (.*$)/gim, '<li>$1</li>');
+    // Маркер списка + заголовок: "* #### текст" или "    *   #### текст"
+    input = input.replace(/^[ \t]*\*[ \t]*#{1,6}[ \t]+(.*$)/gim, '<h4>$1</h4>');
 
-    // Обработка курсивного текста *текст*
+    // Обычные заголовки
+    input = input.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+    input = input.replace(/^#{2,}[ \t]+(.*$)/gim, '<h4>$1</h4>');
+
+    // Маркированные списки с любым отступом и любым кол-вом пробелов после *
+    input = input.replace(/^[ \t]*\*[ \t]+(.*$)/gim, '<p>$1</p>');
+
+    // Курсивный текст *текст* (после списков, чтобы одиночный * маркера не захватывался)
     input = input.replace(/\*(.*?)\*/gim, '<i>$1</i>');
 
-    // Оборачивание текста в <p>, если он не является частью других тегов
-    input = input.replace(/^(?!<h1>|<h4>|<li>|<b>|<i>)(.+)$/gim, '<p>$1</p>');
-
-    input = input.replace(/<li>/gim, '<p>');
-    input = input.replace(/<\/li>/gim, '</p>');
+    // Оборачивание незатронутых строк в <p>
+    input = input.replace(/^(?!<h1>|<h4>|<p>|<b>|<i>)(.+)$/gim, '<p>$1</p>');
 
     // Удаление лишних переносов строк
     input = input.replace(/\n/gim, '');
@@ -850,6 +857,21 @@ function clearCard(card){
     if(new_card.poster_path) new_card.img = Lampa.Api.img(new_card.poster_path,'w300')
 
     return new_card
+}
+
+function resolutionToQuality(width, height, symbol){
+    let quality = 0
+
+    if(width >= 3830) quality = 2160
+    else if(width >= 2550) quality = 1440
+    else if(width >= 1910) quality = 1080
+    else if(width >= 1014) quality = 720
+    else if(width >= 710)  quality = 480
+    else if(width >= 630)  quality = 360
+
+    if(symbol) quality += symbol
+
+    return quality
 }
 
 function qualityToText(quality){
@@ -1106,6 +1128,7 @@ export default {
     callWaiting,
     clearCard,
     qualityToText,
+    resolutionToQuality,
     createInstance,
     extendParams,
     extendItemsParams,
